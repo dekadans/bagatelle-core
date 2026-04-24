@@ -96,7 +96,7 @@ class DefaultConfiguration
             LoggerInterface::class => function (ContainerInterface $c) {
                 $loggerImplementation = PHP_SAPI === 'cli' ? 'app.console.logger' : 'app.http.logger';
                 return $c->get($loggerImplementation);
-            }
+            },
         ];
     }
 
@@ -126,9 +126,7 @@ class DefaultConfiguration
                     public function __construct(
                         private ResponseFactoryInterface $responseFactory,
                         private StreamFactoryInterface   $streamFactory
-                    )
-                    {
-                    }
+                    ) {}
 
                     public function resolve(Request $request, ArgumentMetadata $argument): iterable
                     {
@@ -139,7 +137,7 @@ class DefaultConfiguration
                         }
                     }
                 };
-            }
+            },
         ];
     }
 
@@ -153,7 +151,7 @@ class DefaultConfiguration
                 $templateDir = $c->get('app.root') . '/src/Templates';
                 $options = ['cache' => $cacheDir ?? false];
                 return new Twig(new TwigFilesystemLoader($templateDir), $options);
-            }
+            },
         ];
     }
 
@@ -209,7 +207,7 @@ class DefaultConfiguration
                     ArgumentResolver::getDefaultArgumentValueResolvers()
                 );
                 return new ArgumentResolver(argumentValueResolvers: $resolvers);
-            }
+            },
         ];
     }
 
@@ -231,7 +229,7 @@ class DefaultConfiguration
                 create(ConsoleErrorListener::class)
                     ->constructor(get(LoggerInterface::class)),
                 get(ConsoleHandler::class),
-            ]
+            ],
         ];
     }
 }
