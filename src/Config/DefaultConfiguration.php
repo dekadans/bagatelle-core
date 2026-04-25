@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace tthe\Bagatelle\Config;
 
+use tthe\Bagatelle\Http\CorsHandler;
 use tthe\Bagatelle\Routing\DecoratedControllerLoader;
 use tthe\Bagatelle\Routing\MiddlewareHandler;
 use Monolog\Handler\StreamHandler;
@@ -64,7 +65,8 @@ class DefaultConfiguration
             self::templating(),
             self::routing(),
             self::http(),
-            self::console()
+            self::console(),
+            self::middleware()
         );
     }
 
@@ -230,6 +232,15 @@ class DefaultConfiguration
                     ->constructor(get(LoggerInterface::class)),
                 get(ConsoleHandler::class),
             ],
+        ];
+    }
+
+    public static function middleware(): array
+    {
+        return [
+            // CORS middleware
+            'bagatelle.http.middleware.cors' => [],
+            CorsHandler::class => create()->constructor(get('bagatelle.http.middleware.cors')),
         ];
     }
 }

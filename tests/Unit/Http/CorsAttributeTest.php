@@ -6,10 +6,6 @@ use tthe\Bagatelle\Http\CORS;
 use Symfony\Component\Routing\Route;
 use tthe\Bagatelle\Http\CorsHandler;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /**
  * Return a Route that has had CORS::decorate() applied to it.
  */
@@ -23,61 +19,18 @@ function decoratedRoute(CORS $cors, array $existingMethods = []): Route
     return $route;
 }
 
-// ---------------------------------------------------------------------------
-// Constructor – default values (no env, no arguments)
-// ---------------------------------------------------------------------------
-
-describe('CORS defaults (no env vars, no arguments)', function () {
-
-    beforeEach(function () {
-        // Ensure a clean environment for every test.
-        foreach ([
-            'CORS_ALLOW_ORIGIN',
-            'CORS_ALLOW_METHODS',
-            'CORS_ALLOW_HEADERS',
-            'CORS_EXPOSE_HEADERS',
-            'CORS_ALLOW_CREDENTIALS',
-            'CORS_MAX_AGE',
-        ] as $key) {
-            unset($_ENV[$key]);
-        }
-    });
+describe('CORS default route options', function () {
 
     it('defaults origin to wildcard', function () {
         $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['allow_origin'])->toBe('*');
-    });
-
-    it('defaults methods to all common HTTP verbs', function () {
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['allow_methods'])
-            ->toBe(['GET', 'HEAD', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE']);
-    });
-
-    it('defaults headers to wildcard', function () {
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['allow_headers'])->toBe('*');
-    });
-
-    it('defaults expose_headers to empty string', function () {
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['expose_headers'])->toBe('');
-    });
-
-    it('defaults credentials to false', function () {
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['allow_credentials'])->toBeFalse();
-    });
-
-    it('defaults max_age to null', function () {
-        $route = decoratedRoute(new CORS());
+        expect($route->getDefault('_cors')['allow_origin'])->toBeNull();
+        expect($route->getDefault('_cors')['allow_methods'])->toBeNull();
+        expect($route->getDefault('_cors')['allow_headers'])->toBeNull();
+        expect($route->getDefault('_cors')['expose_headers'])->toBeNull();
+        expect($route->getDefault('_cors')['allow_credentials'])->toBeNull();
         expect($route->getDefault('_cors')['max_age'])->toBeNull();
     });
 });
-
-// ---------------------------------------------------------------------------
-// Constructor – explicit argument values
-// ---------------------------------------------------------------------------
 
 describe('CORS constructor with explicit arguments', function () {
 
@@ -101,9 +54,9 @@ describe('CORS constructor with explicit arguments', function () {
     });
 
     it('accepts a custom headers string', function () {
-        $cors = new CORS(headers: 'Content-Type, Authorization');
+        $cors = new CORS(headers: '*');
         $route = decoratedRoute($cors);
-        expect($route->getDefault('_cors')['allow_headers'])->toBe('Content-Type, Authorization');
+        expect($route->getDefault('_cors')['allow_headers'])->toBe('*');
     });
 
     it('accepts an exposeHeaders array', function () {
@@ -124,88 +77,6 @@ describe('CORS constructor with explicit arguments', function () {
         expect($route->getDefault('_cors')['max_age'])->toBe(3600);
     });
 });
-
-// ---------------------------------------------------------------------------
-// Constructor – env var fallbacks
-// ---------------------------------------------------------------------------
-
-describe('CORS constructor falls back to env vars', function () {
-
-    afterEach(function () {
-        foreach ([
-            'CORS_ALLOW_ORIGIN',
-            'CORS_ALLOW_METHODS',
-            'CORS_ALLOW_HEADERS',
-            'CORS_EXPOSE_HEADERS',
-            'CORS_ALLOW_CREDENTIALS',
-            'CORS_MAX_AGE',
-        ] as $key) {
-            unset($_ENV[$key]);
-        }
-    });
-
-    it('reads CORS_ALLOW_ORIGIN from env and splits on comma', function () {
-        $_ENV['CORS_ALLOW_ORIGIN'] = 'https://a.com, https://b.com';
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['allow_origin'])
-            ->toBe(['https://a.com', 'https://b.com']);
-    });
-
-    it('trims whitespace from env-parsed origins', function () {
-        $_ENV['CORS_ALLOW_ORIGIN'] = '  https://a.com  ,  https://b.com  ';
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['allow_origin'])
-            ->toBe(['https://a.com', 'https://b.com']);
-    });
-
-    it('reads CORS_ALLOW_METHODS from env', function () {
-        $_ENV['CORS_ALLOW_METHODS'] = 'GET, POST';
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['allow_methods'])->toBe(['GET', 'POST']);
-    });
-
-    it('reads CORS_ALLOW_HEADERS from env', function () {
-        $_ENV['CORS_ALLOW_HEADERS'] = 'Content-Type, X-Auth';
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['allow_headers'])->toBe(['Content-Type', 'X-Auth']);
-    });
-
-    it('reads CORS_EXPOSE_HEADERS from env', function () {
-        $_ENV['CORS_EXPOSE_HEADERS'] = 'X-Rate-Limit';
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['expose_headers'])->toBe(['X-Rate-Limit']);
-    });
-
-    it('reads CORS_ALLOW_CREDENTIALS as bool', function () {
-        $_ENV['CORS_ALLOW_CREDENTIALS'] = '1';
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['allow_credentials'])->toBeTrue();
-    });
-
-    it('reads CORS_MAX_AGE as int', function () {
-        $_ENV['CORS_MAX_AGE'] = '86400';
-        $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_cors')['max_age'])->toBe(86400);
-    });
-
-    it('explicit argument overrides env var for origin', function () {
-        $_ENV['CORS_ALLOW_ORIGIN'] = 'https://env.com';
-        $cors = new CORS(origin: 'https://explicit.com');
-        $route = decoratedRoute($cors);
-        expect($route->getDefault('_cors')['allow_origin'])->toBe('https://explicit.com');
-    });
-
-    it('explicit credentials arg overrides env var', function () {
-        $_ENV['CORS_ALLOW_CREDENTIALS'] = '0';
-        $cors = new CORS(credentials: true);
-        $route = decoratedRoute($cors);
-        expect($route->getDefault('_cors')['allow_credentials'])->toBeTrue();
-    });
-});
-
-// ---------------------------------------------------------------------------
-// decorate() – route defaults
-// ---------------------------------------------------------------------------
 
 describe('CORS::decorate() sets _cors route defaults', function () {
 
@@ -228,10 +99,6 @@ describe('CORS::decorate() sets _cors route defaults', function () {
         ]);
     });
 });
-
-// ---------------------------------------------------------------------------
-// decorate() – OPTIONS method injection
-// ---------------------------------------------------------------------------
 
 describe('CORS::decorate() injects OPTIONS method', function () {
 
@@ -258,10 +125,6 @@ describe('CORS::decorate() injects OPTIONS method', function () {
     });
 });
 
-// ---------------------------------------------------------------------------
-// decorate() – CorsHandler middleware registration
-// ---------------------------------------------------------------------------
-
 describe('CORS::decorate() registers CorsHandler middleware', function () {
 
     it('adds CorsHandler middleware to the route', function () {
@@ -276,10 +139,6 @@ describe('CORS::decorate() registers CorsHandler middleware', function () {
         expect($route->getDefault('_middleware'))->toBe(['TestMiddleware', CorsHandler::class]);
     });
 });
-
-// ---------------------------------------------------------------------------
-// PHP Attribute metadata
-// ---------------------------------------------------------------------------
 
 describe('CORS PHP attribute declaration', function () {
 

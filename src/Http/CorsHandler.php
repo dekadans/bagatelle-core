@@ -15,6 +15,8 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class CorsHandler extends Middleware
 {
+    public function __construct(private array $options) {}
+
     /**
      * Process inbound request.
      * Override (skip controller) with an empty response for CORS-preflight requests.
@@ -38,70 +40,95 @@ class CorsHandler extends Middleware
             return;
         }
 
-        $options = $request->attributes->get('_cors', []);
+        $response->headers->set('Vary', 'Origin');
 
-        $origin = $this->getAllowedOrigin($request, $options);
+        $this->setOptions($request->attributes->get('_cors', []));
+
+        $origin = $this->getAllowedOrigin($request);
         if (!$origin) {
             return;
         }
 
         $headers = [
             'Access-Control-Allow-Origin' => $origin,
-            'Access-Control-Allow-Credentials' => $options['allow_credentials'] ? 'true' : null,
-            'Vary' => 'Origin',
+            'Access-Control-Allow-Credentials' => $this->options['allow_credentials'] ? 'true' : null,
         ];
 
         if ($request->isMethod('OPTIONS')) {
-            $methods = $this->getAllowedMethods($request, $options);
-            if ($methods) {
-                $headers['Access-Control-Allow-Methods'] = $methods;
-            } else {
+            $allowedMethods = $this->getAllowedMethods($request);
+            $allowedHeaders = $this->getAllowedHeaders($request);
+
+            if ($allowedMethods === null || $allowedHeaders === null) {
                 return;
             }
 
-            $headers['Access-Control-Allow-Headers'] = $this->getAllowedHeaders($request, $options);
-            $headers['Access-Control-Max-Age'] = $options['max_age'];
-        } elseif ($options['expose_headers']) {
-            $headers['Access-Control-Expose-Headers'] = $this->asString($options['expose_headers']);
+            $headers['Access-Control-Allow-Methods'] = $allowedMethods;
+            $headers['Access-Control-Allow-Headers'] = $allowedHeaders;
+            $headers['Access-Control-Max-Age'] = $this->options['max_age'];
+        } elseif ($this->options['expose_headers']) {
+            $headers['Access-Control-Expose-Headers'] = $this->asString($this->options['expose_headers']);
         }
 
         $response->headers->add(array_filter($headers));
     }
 
-    private function getAllowedOrigin(Request $request, array $options): ?string
+    private function setOptions(array $routeOptions): void
+    {
+        $defaults = [
+            'allow_origin' => [],
+            'allow_methods' => [],
+            'allow_headers' => [],
+            'expose_headers' => [],
+            'allow_credentials' => false,
+            'max_age' => null,
+        ];
+
+        $filteredContainerOptions = array_filter($this->options, fn($v) => $v !== null);
+        $filteredRouteOptions = array_filter($routeOptions, fn($v) => $v !== null);
+
+        $this->options = array_merge($defaults, $filteredContainerOptions, $filteredRouteOptions);
+    }
+
+    private function getAllowedOrigin(Request $request): ?string
     {
         $origin = $request->headers->get('Origin', '');
-        $allowed = $options['allow_origin'] ?? '';
+        $allowed = $this->options['allow_origin'] ?? [];
 
         return $this->verifyHeader($origin, $allowed) ? $origin : null;
     }
 
-    private function getAllowedMethods(Request $request, array $options): ?string
+    private function getAllowedMethods(Request $request): ?string
     {
         $requestMethod = $request->headers->get('Access-Control-Request-Method', '');
-        if ($this->verifyHeader($requestMethod, $options['allow_methods'])) {
-            return $this->asString($options['allow_methods']);
+        if ($this->verifyHeader($requestMethod, $this->options['allow_methods'])) {
+            return $this->asString($this->options['allow_methods']);
         }
 
         return null;
     }
 
-    private function getAllowedHeaders(Request $request, array $options): string
+    private function getAllowedHeaders(Request $request): ?string
     {
-        $requestHeaders = explode(
-            ',',
-            $request->headers->get('Access-Control-Request-Headers', '')
-        );
-        $allowedHeaders = array_filter(
-            $requestHeaders,
-            fn($h) => $this->verifyHeader($h, $options['allow_headers'])
-        );
+        if (!$request->headers->has('Access-Control-Request-Headers')) {
+            return '';
+        }
 
-        return $this->asString($allowedHeaders);
+        $requestHeaders = array_map(
+            trim(...),
+            explode(',', $request->headers->get('Access-Control-Request-Headers'))
+        );
+        $allowedHeaders = $this->options['allow_headers'];
+        $result = array_all($requestHeaders, fn($h) => $this->verifyHeader($h, $allowedHeaders));
+
+        return $result ? $this->asString($allowedHeaders) : null;
     }
 
     private function verifyHeader(string $value, string|array $allowed): bool
     {
+        if ($value === '') {
+            return false;
+        }
+
         $value = strtolower($value);
 
         if ($allowed === '*') {

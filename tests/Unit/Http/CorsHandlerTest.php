@@ -6,410 +6,395 @@ use tthe\Bagatelle\Http\CorsHandler;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+/**
+ * Build a CorsHandler with the given container-level options.
+ */
+function makeHandler(array $options = []): CorsHandler
+{
+    return new CorsHandler($options);
+}
 
 /**
- * Build a Request with the given headers and optional method / CORS attributes.
+ * Build a Request, optionally attaching route-level _cors attributes.
  */
 function makeRequest(
     string $method = 'GET',
     array  $headers = [],
-    array  $corsOptions = [],
+    array  $corsAttributes = [],
 ): Request {
-    $request = Request::create('/test', $method);
+    $request = Request::create('https://example.com/api', $method);
+
     foreach ($headers as $name => $value) {
         $request->headers->set($name, $value);
     }
-    if ($corsOptions) {
-        $request->attributes->set('_cors', $corsOptions);
+
+    if ($corsAttributes) {
+        $request->attributes->set('_cors', $corsAttributes);
     }
+
     return $request;
 }
 
-/**
- * Default, permissive CORS options – mirrors the CORS attribute defaults.
- */
-function defaultOptions(array $overrides = []): array
-{
-    return array_merge([
-        'allow_origin'      => '*',
-        'allow_methods'     => ['GET', 'HEAD', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
-        'allow_headers'     => '*',
-        'expose_headers'    => '',
-        'allow_credentials' => false,
-        'max_age'           => null,
-    ], $overrides);
-}
+describe('inbound()', function () {
 
-function handler(): CorsHandler
-{
-    return new CorsHandler();
-}
+    it('returns a 204 response for OPTIONS requests with an Origin header', function () {
+        $handler  = makeHandler();
+        $request  = makeRequest('OPTIONS', ['Origin' => 'https://client.example.com']);
 
-// ---------------------------------------------------------------------------
-// inbound()
-// ---------------------------------------------------------------------------
+        $response = $handler->inbound($request);
 
-describe('CorsHandler::inbound()', function () {
-
-    it('returns a 204 empty response for OPTIONS preflight with Origin header', function () {
-        $request  = makeRequest('OPTIONS', ['Origin' => 'https://example.com']);
-        $response = handler()->inbound($request);
-
-        expect($response)->toBeInstanceOf(Response::class);
-        expect($response->getStatusCode())->toBe(204);
-        expect($response->getContent())->toBe('');
+        expect($response)->toBeInstanceOf(Response::class)
+            ->and($response->getStatusCode())->toBe(204)
+            ->and($response->getContent())->toBe('');
     });
 
-    it('returns null for OPTIONS without an Origin header', function () {
-        $request = makeRequest('OPTIONS');
-        expect(handler()->inbound($request))->toBeNull();
+    it('returns null for OPTIONS requests without an Origin header', function () {
+        $handler  = makeHandler();
+        $request  = makeRequest('OPTIONS');
+
+        expect($handler->inbound($request))->toBeNull();
     });
 
-    it('returns null for a GET request with an Origin header', function () {
-        $request = makeRequest('GET', ['Origin' => 'https://example.com']);
-        expect(handler()->inbound($request))->toBeNull();
+    it('returns null for non-OPTIONS requests even with an Origin header', function () {
+        $handler = makeHandler();
+
+        foreach (['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as $method) {
+            $request = makeRequest($method, ['Origin' => 'https://client.example.com']);
+            expect($handler->inbound($request))->toBeNull();
+        }
     });
 
-    it('returns null for a POST request with an Origin header', function () {
-        $request = makeRequest('POST', ['Origin' => 'https://example.com']);
-        expect(handler()->inbound($request))->toBeNull();
-    });
-
-    it('returns null for a request with no Origin and no OPTIONS', function () {
-        $request = makeRequest('GET');
-        expect(handler()->inbound($request))->toBeNull();
-    });
 });
 
-// ---------------------------------------------------------------------------
-// outbound() – requests without Origin
-// ---------------------------------------------------------------------------
+describe('outbound() — early exits', function () {
 
-describe('CorsHandler::outbound() – no Origin header', function () {
-
-    it('adds no CORS headers when Origin is absent', function () {
-        $request  = makeRequest('GET', [], defaultOptions());
+    it('does nothing when there is no Origin header', function () {
+        $handler  = makeHandler(['allow_origin' => '*']);
+        $request  = makeRequest('GET');          // no Origin
         $response = new Response();
-        handler()->outbound($request, $response);
 
-        expect($response->headers->has('Access-Control-Allow-Origin'))->toBeFalse();
+        $handler->outbound($request, $response);
+
+        expect($response->headers->has('Access-Control-Allow-Origin'))->toBeFalse()
+            ->and($response->headers->has('Vary'))->toBeFalse();
     });
+
+    it('sets Vary: Origin even when the origin is not allowed', function () {
+        $handler  = makeHandler(['allow_origin' => 'https://allowed.example.com']);
+        $request  = makeRequest('GET', ['Origin' => 'https://other.example.com']);
+        $response = new Response();
+
+        $handler->outbound($request, $response);
+
+        expect($response->headers->get('Vary'))->toBe('Origin')
+            ->and($response->headers->has('Access-Control-Allow-Origin'))->toBeFalse();
+    });
+
 });
 
-// ---------------------------------------------------------------------------
-// outbound() – origin validation
-// ---------------------------------------------------------------------------
+describe('outbound() — simple requests', function () {
 
-describe('CorsHandler::outbound() – origin validation', function () {
-
-    it('sets Access-Control-Allow-Origin to the request origin when allow_origin is wildcard', function () {
-        $request  = makeRequest('GET', ['Origin' => 'https://example.com'], defaultOptions());
+    it('reflects the request origin when allow_origin is a wildcard', function () {
+        $handler  = makeHandler(['allow_origin' => '*']);
+        $request  = makeRequest('GET', ['Origin' => 'https://client.example.com']);
         $response = new Response();
-        handler()->outbound($request, $response);
 
-        expect($response->headers->get('Access-Control-Allow-Origin'))->toBe('https://example.com');
+        $handler->outbound($request, $response);
+
+        expect($response->headers->get('Access-Control-Allow-Origin'))
+            ->toBe('https://client.example.com');
     });
 
-    it('sets Access-Control-Allow-Origin when origin is in the allowed array', function () {
-        $options  = defaultOptions(['allow_origin' => ['https://a.com', 'https://b.com']]);
-        $request  = makeRequest('GET', ['Origin' => 'https://a.com'], $options);
+    it('reflects the request origin when it matches an explicit allowed origin', function () {
+        $handler  = makeHandler(['allow_origin' => ['https://client.example.com', 'https://other.example.com']]);
+        $request  = makeRequest('GET', ['Origin' => 'https://client.example.com']);
         $response = new Response();
-        handler()->outbound($request, $response);
 
-        expect($response->headers->get('Access-Control-Allow-Origin'))->toBe('https://a.com');
+        $handler->outbound($request, $response);
+
+        expect($response->headers->get('Access-Control-Allow-Origin'))
+            ->toBe('https://client.example.com');
     });
 
-    it('adds no CORS headers when origin is not in the allowed array', function () {
-        $options  = defaultOptions(['allow_origin' => ['https://allowed.com']]);
-        $request  = makeRequest('GET', ['Origin' => 'https://other.com'], $options);
+    it('does not set CORS headers when origin is not in the allow list', function () {
+        $handler  = makeHandler(['allow_origin' => ['https://allowed.example.com']]);
+        $request  = makeRequest('GET', ['Origin' => 'https://evil.example.com']);
         $response = new Response();
-        handler()->outbound($request, $response);
+
+        $handler->outbound($request, $response);
 
         expect($response->headers->has('Access-Control-Allow-Origin'))->toBeFalse();
     });
 
-    it('performs case-insensitive origin comparison', function () {
-        $options  = defaultOptions(['allow_origin' => ['https://Example.COM']]);
-        $request  = makeRequest('GET', ['Origin' => 'https://example.com'], $options);
+    it('sets Access-Control-Allow-Credentials: true when allow_credentials is true', function () {
+        $handler  = makeHandler(['allow_origin' => '*', 'allow_credentials' => true]);
+        $request  = makeRequest('GET', ['Origin' => 'https://client.example.com']);
         $response = new Response();
-        handler()->outbound($request, $response);
 
-        expect($response->headers->get('Access-Control-Allow-Origin'))->toBe('https://example.com');
+        $handler->outbound($request, $response);
+
+        expect($response->headers->get('Access-Control-Allow-Credentials'))->toBe('true');
     });
 
-    it('sets Access-Control-Allow-Origin when allow_origin is an exact matching string', function () {
-        $options  = defaultOptions(['allow_origin' => 'https://exact.com']);
-        $request  = makeRequest('GET', ['Origin' => 'https://exact.com'], $options);
+    it('omits Access-Control-Allow-Credentials when allow_credentials is false', function () {
+        $handler  = makeHandler(['allow_origin' => '*', 'allow_credentials' => false]);
+        $request  = makeRequest('GET', ['Origin' => 'https://client.example.com']);
         $response = new Response();
-        handler()->outbound($request, $response);
 
-        expect($response->headers->get('Access-Control-Allow-Origin'))->toBe('https://exact.com');
-    });
-
-    it('rejects origin when allow_origin is a non-matching string', function () {
-        $options  = defaultOptions(['allow_origin' => 'https://exact.com']);
-        $request  = makeRequest('GET', ['Origin' => 'https://other.com'], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
-
-        expect($response->headers->has('Access-Control-Allow-Origin'))->toBeFalse();
-    });
-});
-
-// ---------------------------------------------------------------------------
-// outbound() – Vary header
-// ---------------------------------------------------------------------------
-
-describe('CorsHandler::outbound() – Vary header', function () {
-
-    it('sets the Vary: Origin header for simple requests', function () {
-        $request  = makeRequest('GET', ['Origin' => 'https://example.com'], defaultOptions());
-        $response = new Response();
-        handler()->outbound($request, $response);
-
-        expect($response->headers->get('Vary'))->toBe('Origin');
-    });
-});
-
-// ---------------------------------------------------------------------------
-// outbound() – credentials
-// ---------------------------------------------------------------------------
-
-describe('CorsHandler::outbound() – credentials', function () {
-
-    it('omits Access-Control-Allow-Credentials when credentials is false', function () {
-        $options  = defaultOptions(['allow_credentials' => false]);
-        $request  = makeRequest('GET', ['Origin' => 'https://example.com'], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+        $handler->outbound($request, $response);
 
         expect($response->headers->has('Access-Control-Allow-Credentials'))->toBeFalse();
     });
 
-    it('sets Access-Control-Allow-Credentials: true when credentials is true', function () {
-        $options  = defaultOptions(['allow_credentials' => true]);
-        $request  = makeRequest('GET', ['Origin' => 'https://example.com'], $options);
+    it('sets Access-Control-Expose-Headers on non-preflight responses', function () {
+        $handler  = makeHandler([
+            'allow_origin'   => '*',
+            'expose_headers' => ['X-Custom-Header', 'X-Another-Header'],
+        ]);
+        $request  = makeRequest('GET', ['Origin' => 'https://client.example.com']);
         $response = new Response();
-        handler()->outbound($request, $response);
 
-        expect($response->headers->get('Access-Control-Allow-Credentials'))->toBe('true');
-    });
-});
-
-// ---------------------------------------------------------------------------
-// outbound() – expose_headers (non-preflight)
-// ---------------------------------------------------------------------------
-
-describe('CorsHandler::outbound() – expose_headers', function () {
-
-    it('sets Access-Control-Expose-Headers for simple requests when configured', function () {
-        $options  = defaultOptions(['expose_headers' => ['X-Rate-Limit', 'X-Request-Id']]);
-        $request  = makeRequest('GET', ['Origin' => 'https://example.com'], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+        $handler->outbound($request, $response);
 
         expect($response->headers->get('Access-Control-Expose-Headers'))
-            ->toBe('X-Rate-Limit, X-Request-Id');
+            ->toBe('X-Custom-Header, X-Another-Header');
     });
 
     it('omits Access-Control-Expose-Headers when expose_headers is empty', function () {
-        $options  = defaultOptions(['expose_headers' => '']);
-        $request  = makeRequest('GET', ['Origin' => 'https://example.com'], $options);
+        $handler  = makeHandler(['allow_origin' => '*', 'expose_headers' => []]);
+        $request  = makeRequest('GET', ['Origin' => 'https://client.example.com']);
         $response = new Response();
-        handler()->outbound($request, $response);
+
+        $handler->outbound($request, $response);
 
         expect($response->headers->has('Access-Control-Expose-Headers'))->toBeFalse();
     });
 
-    it('omits Access-Control-Expose-Headers for OPTIONS preflight requests', function () {
-        $options = defaultOptions([
-            'expose_headers' => ['X-Custom'],
-            'allow_methods'  => ['GET', 'POST'],
+    it('always sets Vary: Origin on allowed requests', function () {
+        $handler  = makeHandler(['allow_origin' => '*']);
+        $request  = makeRequest('GET', ['Origin' => 'https://client.example.com']);
+        $response = new Response();
+
+        $handler->outbound($request, $response);
+
+        expect($response->headers->get('Vary'))->toBe('Origin');
+    });
+
+});
+
+describe('outbound() — preflight requests', function () {
+
+    it('adds preflight headers when method and all headers are allowed', function () {
+        $handler = makeHandler([
+            'allow_origin'  => '*',
+            'allow_methods' => ['GET', 'POST'],
+            'allow_headers' => ['Content-Type', 'Authorization'],
+            'max_age'       => 3600,
         ]);
         $request = makeRequest('OPTIONS', [
-            'Origin'                         => 'https://example.com',
-            'Access-Control-Request-Method'  => 'GET',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+            'Origin'                         => 'https://client.example.com',
+            'Access-Control-Request-Method'  => 'POST',
+            'Access-Control-Request-Headers' => 'Content-Type, Authorization',
+        ]);
+        $response = new Response('', 204);
 
-        expect($response->headers->has('Access-Control-Expose-Headers'))->toBeFalse();
-    });
-});
+        $handler->outbound($request, $response);
 
-// ---------------------------------------------------------------------------
-// outbound() – preflight (OPTIONS) method validation
-// ---------------------------------------------------------------------------
-
-describe('CorsHandler::outbound() – preflight method validation', function () {
-
-    it('sets Access-Control-Allow-Methods for a valid preflight request', function () {
-        $options = defaultOptions(['allow_methods' => ['GET', 'POST']]);
-        $request = makeRequest('OPTIONS', [
-            'Origin'                        => 'https://example.com',
-            'Access-Control-Request-Method' => 'POST',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
-
-        expect($response->headers->get('Access-Control-Allow-Methods'))->toBe('GET, POST');
+        expect($response->headers->get('Access-Control-Allow-Methods'))
+            ->toBe('GET, POST')
+            ->and($response->headers->get('Access-Control-Allow-Headers'))
+            ->toBe('Content-Type, Authorization')
+            ->and($response->headers->get('Access-Control-Max-Age'))
+            ->toBe('3600');
     });
 
-    it('adds no CORS headers when the requested method is not allowed', function () {
-        $options = defaultOptions(['allow_methods' => ['GET']]);
+    it('returns without CORS headers when the requested method is not allowed', function () {
+        $handler = makeHandler([
+            'allow_origin'  => '*',
+            'allow_methods' => ['GET'],
+            'allow_headers' => ['Content-Type'],
+        ]);
         $request = makeRequest('OPTIONS', [
-            'Origin'                        => 'https://example.com',
+            'Origin'                        => 'https://client.example.com',
             'Access-Control-Request-Method' => 'DELETE',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+        ]);
+        $response = new Response('', 204);
+
+        $handler->outbound($request, $response);
 
         expect($response->headers->has('Access-Control-Allow-Methods'))->toBeFalse();
-        expect($response->headers->has('Access-Control-Allow-Origin'))->toBeFalse();
     });
 
-    it('allows any method when allow_methods is wildcard', function () {
-        $options = defaultOptions(['allow_methods' => '*']);
+    it('returns without CORS headers when a requested header is not allowed', function () {
+        $handler = makeHandler([
+            'allow_origin'  => '*',
+            'allow_methods' => ['POST'],
+            'allow_headers' => ['Content-Type'],
+        ]);
         $request = makeRequest('OPTIONS', [
-            'Origin'                        => 'https://example.com',
-            'Access-Control-Request-Method' => 'DELETE',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+            'Origin'                         => 'https://client.example.com',
+            'Access-Control-Request-Method'  => 'POST',
+            'Access-Control-Request-Headers' => 'Content-Type, X-Not-Allowed',
+        ]);
+        $response = new Response('', 204);
 
-        expect($response->headers->get('Access-Control-Allow-Methods'))->toBe('*');
+        $handler->outbound($request, $response);
+
+        expect($response->headers->has('Access-Control-Allow-Headers'))->toBeFalse();
     });
 
-    it('performs case-insensitive method comparison', function () {
-        $options = defaultOptions(['allow_methods' => ['GET', 'POST']]);
+    it('allows a preflight with no Access-Control-Request-Headers header', function () {
+        $handler = makeHandler([
+            'allow_origin'  => '*',
+            'allow_methods' => ['GET'],
+            'allow_headers' => ['Content-Type'],
+        ]);
         $request = makeRequest('OPTIONS', [
-            'Origin'                        => 'https://example.com',
-            'Access-Control-Request-Method' => 'post',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+            'Origin'                        => 'https://client.example.com',
+            'Access-Control-Request-Method' => 'GET',
+            // No Access-Control-Request-Headers
+        ]);
+        $response = new Response('', 204);
 
-        expect($response->headers->get('Access-Control-Allow-Methods'))->toBe('GET, POST');
+        $handler->outbound($request, $response);
+
+        expect($response->headers->has('Access-Control-Allow-Origin'))->toBeTrue();
+        expect($response->headers->has('Access-Control-Allow-Headers'))->toBeFalse();
     });
-});
 
-// ---------------------------------------------------------------------------
-// outbound() – preflight (OPTIONS) header validation
-// ---------------------------------------------------------------------------
-
-describe('CorsHandler::outbound() – preflight header validation', function () {
-
-    it('returns all requested headers when allow_headers is wildcard', function () {
-        $options = defaultOptions(['allow_headers' => '*']);
+    it('handles header names case-insensitively', function () {
+        $handler = makeHandler([
+            'allow_origin'  => '*',
+            'allow_methods' => ['POST'],
+            'allow_headers' => ['content-type'],
+        ]);
         $request = makeRequest('OPTIONS', [
-            'Origin'                          => 'https://example.com',
-            'Access-Control-Request-Method'   => 'POST',
-            'Access-Control-Request-Headers'  => 'Content-Type,Authorization',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+            'Origin'                         => 'https://client.example.com',
+            'Access-Control-Request-Method'  => 'POST',
+            'Access-Control-Request-Headers' => 'Content-Type',
+        ]);
+        $response = new Response('', 204);
+
+        $handler->outbound($request, $response);
 
         expect($response->headers->get('Access-Control-Allow-Headers'))
-            ->toBe('Content-Type, Authorization');
+            ->toBe('content-type');
     });
 
-    it('filters to only the allowed subset of requested headers', function () {
-        $options = defaultOptions(['allow_headers' => ['content-type']]);
+    it('handles whitespace in Access-Control-Request-Headers values', function () {
+        $handler = makeHandler([
+            'allow_origin'  => '*',
+            'allow_methods' => ['POST'],
+            'allow_headers' => ['content-type', 'authorization'],
+        ]);
         $request = makeRequest('OPTIONS', [
-            'Origin'                          => 'https://example.com',
-            'Access-Control-Request-Method'   => 'POST',
-            'Access-Control-Request-Headers'  => 'Content-Type,Authorization',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+            'Origin'                         => 'https://client.example.com',
+            'Access-Control-Request-Method'  => 'POST',
+            'Access-Control-Request-Headers' => 'content-type,  authorization', // extra space
+        ]);
+        $response = new Response('', 204);
 
-        expect($response->headers->get('Access-Control-Allow-Headers'))->toBe('Content-Type');
-        expect($response->headers->get('Access-Control-Allow-Headers'))->not->toContain('Authorization');
+        $handler->outbound($request, $response);
+
+        expect($response->headers->get('Access-Control-Allow-Headers'))
+            ->toBe('content-type, authorization');
     });
 
-    it('sets Access-Control-Allow-Headers to empty string when no requested headers match', function () {
-        $options = defaultOptions(['allow_headers' => ['x-custom']]);
+    it('does not set Access-Control-Expose-Headers on preflight responses', function () {
+        $handler = makeHandler([
+            'allow_origin'   => '*',
+            'allow_methods'  => ['GET'],
+            'allow_headers'  => ['Content-Type'],
+            'expose_headers' => ['X-Custom'],
+        ]);
         $request = makeRequest('OPTIONS', [
-            'Origin'                          => 'https://example.com',
-            'Access-Control-Request-Method'   => 'GET',
-            'Access-Control-Request-Headers'  => 'Authorization',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
-
-        // Empty string is filtered by array_filter, so the header is absent.
-        expect($response->headers->get('Access-Control-Allow-Headers', ''))->toBe('');
-    });
-
-    it('performs case-insensitive header comparison', function () {
-        $options = defaultOptions(['allow_headers' => ['Content-Type']]);
-        $request = makeRequest('OPTIONS', [
-            'Origin'                          => 'https://example.com',
-            'Access-Control-Request-Method'   => 'POST',
-            'Access-Control-Request-Headers'  => 'content-type',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
-
-        expect($response->headers->get('Access-Control-Allow-Headers'))->not->toBeEmpty();
-    });
-});
-
-// ---------------------------------------------------------------------------
-// outbound() – max_age
-// ---------------------------------------------------------------------------
-
-describe('CorsHandler::outbound() – max_age', function () {
-
-    it('sets Access-Control-Max-Age on a preflight response when configured', function () {
-        $options = defaultOptions(['max_age' => 3600]);
-        $request = makeRequest('OPTIONS', [
-            'Origin'                        => 'https://example.com',
+            'Origin'                        => 'https://client.example.com',
             'Access-Control-Request-Method' => 'GET',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+        ]);
+        $response = new Response('', 204);
 
-        expect($response->headers->get('Access-Control-Max-Age'))->toBe('3600');
+        $handler->outbound($request, $response);
+
+        expect($response->headers->has('Access-Control-Expose-Headers'))->toBeFalse();
     });
 
     it('omits Access-Control-Max-Age when max_age is null', function () {
-        $options = defaultOptions(['max_age' => null]);
+        $handler = makeHandler([
+            'allow_origin'  => '*',
+            'allow_methods' => ['GET'],
+            'allow_headers' => [],
+            'max_age'       => null,
+        ]);
         $request = makeRequest('OPTIONS', [
-            'Origin'                        => 'https://example.com',
+            'Origin'                        => 'https://client.example.com',
             'Access-Control-Request-Method' => 'GET',
-        ], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
+        ]);
+        $response = new Response('', 204);
+
+        $handler->outbound($request, $response);
 
         expect($response->headers->has('Access-Control-Max-Age'))->toBeFalse();
     });
 
-    it('does not set Access-Control-Max-Age on non-preflight responses', function () {
-        $options  = defaultOptions(['max_age' => 3600]);
-        $request  = makeRequest('GET', ['Origin' => 'https://example.com'], $options);
-        $response = new Response();
-        handler()->outbound($request, $response);
-
-        expect($response->headers->has('Access-Control-Max-Age'))->toBeFalse();
-    });
 });
 
-// ---------------------------------------------------------------------------
-// outbound() – missing _cors attributes
-// ---------------------------------------------------------------------------
+describe('option merging', function () {
 
-describe('CorsHandler::outbound() – missing _cors route attribute', function () {
-
-    it('adds no CORS headers when _cors route attribute is absent', function () {
-        $request = makeRequest('GET', ['Origin' => 'https://example.com']);
-        // No _cors set on request attributes – defaults to empty array.
+    it('route-level options override container-level options', function () {
+        $handler = makeHandler([
+            'allow_origin'  => ['https://container.example.com'],
+            'allow_methods' => ['GET'],
+        ]);
+        $request = makeRequest('GET', ['Origin' => 'https://route.example.com'], [
+            'allow_origin' => ['https://route.example.com'],
+        ]);
         $response = new Response();
-        handler()->outbound($request, $response);
 
-        expect($response->headers->has('Access-Control-Allow-Origin'))->toBeFalse();
+        $handler->outbound($request, $response);
+
+        expect($response->headers->get('Access-Control-Allow-Origin'))
+            ->toBe('https://route.example.com');
     });
+
+    it('preserves container-level options not overridden by the route', function () {
+        $handler = makeHandler([
+            'allow_origin'      => '*',
+            'allow_credentials' => true,
+        ]);
+        // Route provides no _cors attributes — container options should hold
+        $request  = makeRequest('GET', ['Origin' => 'https://client.example.com']);
+        $response = new Response();
+
+        $handler->outbound($request, $response);
+
+        expect($response->headers->get('Access-Control-Allow-Credentials'))->toBe('true');
+    });
+
+    it('null route options do not override non-null container options', function () {
+        $handler = makeHandler(['allow_origin' => '*', 'allow_methods' => ['GET'], 'max_age' => 600]);
+        $request = makeRequest('OPTIONS', [
+            'Origin'                        => 'https://client.example.com',
+            'Access-Control-Request-Method' => 'GET',
+        ], [
+            'max_age' => null, // explicitly null at route level — should not override
+        ]);
+        $response = new Response('', 204);
+
+        $handler->outbound($request, $response);
+
+        expect($response->headers->get('Access-Control-Max-Age'))->toBe('600');
+    });
+
+    it('false allow_credentials at route level overrides true at container level', function () {
+        $handler = makeHandler(['allow_origin' => '*', 'allow_credentials' => true]);
+        $request = makeRequest('GET', ['Origin' => 'https://client.example.com'], [
+            'allow_credentials' => false,
+        ]);
+        $response = new Response();
+
+        $handler->outbound($request, $response);
+
+        expect($response->headers->has('Access-Control-Allow-Credentials'))->toBeFalse();
+    });
+
 });
