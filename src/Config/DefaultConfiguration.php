@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace tthe\Bagatelle\Config;
 
+use tthe\Bagatelle\Auth\AuthenticatorInterface;
+use tthe\Bagatelle\Http\BasicAuthHandler;
 use tthe\Bagatelle\Http\CorsHandler;
 use tthe\Bagatelle\Routing\DecoratedControllerLoader;
 use tthe\Bagatelle\Routing\MiddlewareHandler;
@@ -241,6 +243,13 @@ class DefaultConfiguration
             // CORS middleware
             'bagatelle.http.middleware.cors' => [],
             CorsHandler::class => create()->constructor(get('bagatelle.http.middleware.cors')),
+
+            // Basic Auth middleware
+            'bagatelle.http.middleware.basic-auth.realm' => 'Protected content',
+            BasicAuthHandler::class => create()->constructor(
+                get('bagatelle.http.middleware.basic-auth.realm'),
+                get(AuthenticatorInterface::class)
+            ),
         ];
     }
 }

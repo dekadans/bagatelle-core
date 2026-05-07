@@ -21,10 +21,10 @@ function decoratedRoute(CORS $cors, array $existingMethods = []): Route
 
 describe('CORS default route options', function () {
 
-    it('defaults origin to wildcard', function () {
+    it('uses default values', function () {
         $route = decoratedRoute(new CORS());
         expect($route->getDefault('_cors')['allow_origin'])->toBeNull();
-        expect($route->getDefault('_cors')['allow_methods'])->toBeNull();
+        expect($route->getDefault('_cors')['allow_methods'])->toBe('*');
         expect($route->getDefault('_cors')['allow_headers'])->toBeNull();
         expect($route->getDefault('_cors')['expose_headers'])->toBeNull();
         expect($route->getDefault('_cors')['allow_credentials'])->toBeNull();
@@ -129,14 +129,14 @@ describe('CORS::decorate() registers CorsHandler middleware', function () {
 
     it('adds CorsHandler middleware to the route', function () {
         $route = decoratedRoute(new CORS());
-        expect($route->getDefault('_middleware'))->toBe([CorsHandler::class]);
+        expect($route->getDefault('bagatelle.middleware'))->toBe([CorsHandler::class]);
     });
 
     it('keeps previous middleware registered', function () {
         $route = new Route('/test');
-        $route->setDefault('_middleware', ['TestMiddleware']);
+        $route->setDefault('bagatelle.middleware', ['TestMiddleware']);
         new CORS()->decorate($route);
-        expect($route->getDefault('_middleware'))->toBe(['TestMiddleware', CorsHandler::class]);
+        expect($route->getDefault('bagatelle.middleware'))->toBe(['TestMiddleware', CorsHandler::class]);
     });
 });
 

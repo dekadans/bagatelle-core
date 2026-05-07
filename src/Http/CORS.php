@@ -10,7 +10,7 @@ use Symfony\Component\Routing\Route;
 
 /**
  * Attribute for configuring Cross-origin resource sharing (CORS) for a route or controller.
- * Configure CORS access control using arguments to the attribute, or globally in the .env file.
+ * Configure CORS access control using arguments to the attribute, or globally in the container.
  */
 #[\Attribute(\Attribute::TARGET_CLASS | \Attribute::TARGET_METHOD)]
 class CORS implements RouteDecoratorInterface
@@ -28,14 +28,12 @@ class CORS implements RouteDecoratorInterface
     {
         $routeMethods = $route->getMethods();
 
-        if (!empty($routeMethods)) {
-            if (!$this->methods) {
-                $this->methods = $routeMethods;
-            }
+        if ($routeMethods && !in_array('OPTIONS', $routeMethods)) {
+            $route->setMethods(['OPTIONS', ...$routeMethods]);
+        }
 
-            if (!in_array('OPTIONS', $routeMethods)) {
-                $route->setMethods(['OPTIONS', ...$routeMethods]);
-            }
+        if (!$this->methods) {
+            $this->methods = $routeMethods ?: '*';
         }
 
         $route->setDefault('_cors', [

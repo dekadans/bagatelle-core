@@ -10,7 +10,7 @@ use Symfony\Component\Routing\Route;
 
 abstract class Middleware
 {
-    private const string ATTRIBUTE_KEY = '_middleware';
+    private const string ATTRIBUTE_KEY = 'bagatelle.middleware';
 
     /**
      * Process the request before it reaches the controller.
