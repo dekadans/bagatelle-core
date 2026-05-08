@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tthe\Bagatelle\Http;
 
 use Symfony\Component\HttpFoundation\Request;
@@ -10,7 +12,6 @@ use tthe\Bagatelle\Routing\Middleware;
 
 /**
  * Middleware for Basic Authentication.
- * Bind your authenticator implementation to container entry `bagatelle.http.middleware.basic-auth.authenticator`.
  */
 class BasicAuthHandler extends Middleware
 {

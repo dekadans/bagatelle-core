@@ -84,6 +84,26 @@ class DefaultConfiguration
     public static function logging(): array
     {
         return [
+            'bagatelle.http.logger.exceptions' => function (ContainerInterface $c) {
+                $exceptions = [
+                    \Symfony\Component\HttpKernel\Exception\BadRequestHttpException::class, // 400
+                    \Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException::class, // 401
+                    \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException::class, // 403
+                    \Symfony\Component\HttpKernel\Exception\NotFoundHttpException::class, // 404
+                    \Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException::class, // 405
+                    \Symfony\Component\HttpKernel\Exception\NotAcceptableHttpException::class, // 406
+                    \Symfony\Component\HttpKernel\Exception\ConflictHttpException::class, // 409
+                    \Symfony\Component\HttpKernel\Exception\GoneHttpException::class, // 410
+                    \Symfony\Component\HttpKernel\Exception\UnsupportedMediaTypeHttpException::class, // 415
+                    \Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException::class, // 422
+                ];
+
+                return array_fill_keys($exceptions, [
+                    'log_level' => $c->get('app.http.logger.client-errors'),
+                    'status_code' => null,
+                    'log_channel' => null,
+                ]);
+            },
             StreamHandler::class => function (ContainerInterface $c) {
                 $streamUri = !empty($_ENV['LOG_STREAM']) ? $_ENV['LOG_STREAM'] : 'php://stderr';
                 if (!str_contains($streamUri, '://')) {
@@ -191,7 +211,7 @@ class DefaultConfiguration
                         get('app.http.error-handler'),
                         get(LoggerInterface::class),
                         false,
-                        get('app.http.logger.exceptions')
+                        get('bagatelle.http.logger.exceptions')
                     ),
                 create(PsrResponseListener::class)
                     ->constructor(
