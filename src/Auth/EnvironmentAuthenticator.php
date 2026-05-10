@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace tthe\Bagatelle\Auth;
 
+use Psr\Log\LoggerInterface;
+
 /**
  * Very simple authentication, reading usernames and hashed passwords from environment variables.
  * Supports both the PHP password_hash() format and plain SHA-256 hashes.
@@ -11,12 +13,14 @@ namespace tthe\Bagatelle\Auth;
 class EnvironmentAuthenticator implements AuthenticatorInterface
 {
     private array $environment;
+    private LoggerInterface $logger;
 
     /**
      * @param array $envVars Associative array with environment variables: ['USER_NAME_VAR' => 'USER_HASH_VAR']
      */
-    public function __construct(array $envVars)
+    public function __construct(array $envVars, LoggerInterface $logger)
     {
+        $this->logger = $logger;
         $this->environment = $this->resolve($envVars);
     }
 
@@ -40,7 +44,18 @@ class EnvironmentAuthenticator implements AuthenticatorInterface
             $user = $_ENV[$userVar] ?? null;
             $hash = $_ENV[$passwordVar] ?? null;
 
-            if ($user === null || $hash === null) {
+            if ($user === null) {
+                $this->logger->warning(
+                    'User environment variable {var} is undefined.',
+                    ['var' => $userVar, 'file' => __FILE__]
+                );
+                continue;
+            }
+            if ($hash === null) {
+                $this->logger->warning(
+                    'Password hash environment variable {var} is undefined.',
+                    ['var' => $passwordVar, 'file' => __FILE__]
+                );
                 continue;
             }
 

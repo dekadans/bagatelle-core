@@ -1,5 +1,6 @@
 <?php
 
+use Psr\Log\LoggerInterface;
 use tthe\Bagatelle\Auth\EnvironmentAuthenticator;
 
 // ---------------------------------------------------------------------------
@@ -28,7 +29,14 @@ function makeAuthenticator(array $users, string $format = 'bcrypt'): Environment
         $envVarMap[$userVar] = $hashVar;
     }
 
-    return new EnvironmentAuthenticator($envVarMap);
+    return new EnvironmentAuthenticator($envVarMap, authLogMock());
+}
+
+function authLogMock()
+{
+    $mock = Mockery::mock(LoggerInterface::class);
+    $mock->allows('warning');
+    return $mock;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +157,7 @@ describe('environment variable resolution', function () {
         $_ENV['AUTH_HASH_GHOST'] = password_hash('pw', PASSWORD_BCRYPT);
         // AUTH_USER_GHOST is intentionally not set
 
-        $auth = new EnvironmentAuthenticator(['AUTH_USER_GHOST' => 'AUTH_HASH_GHOST']);
+        $auth = new EnvironmentAuthenticator(['AUTH_USER_GHOST' => 'AUTH_HASH_GHOST'], authLogMock());
 
         // With no resolved users, any call must return null
         expect($auth->authenticate('ghost', 'pw'))->toBeNull();
@@ -159,7 +167,7 @@ describe('environment variable resolution', function () {
         $_ENV['AUTH_USER_NOHASH'] = 'nohash';
         // AUTH_HASH_NOHASH is intentionally not set
 
-        $auth = new EnvironmentAuthenticator(['AUTH_USER_NOHASH' => 'AUTH_HASH_NOHASH']);
+        $auth = new EnvironmentAuthenticator(['AUTH_USER_NOHASH' => 'AUTH_HASH_NOHASH'], authLogMock());
 
         expect($auth->authenticate('nohash', 'anything'))->toBeNull();
     });
@@ -174,7 +182,7 @@ describe('environment variable resolution', function () {
         $auth = new EnvironmentAuthenticator([
             'AUTH_USER_ALICE2' => 'AUTH_HASH_ALICE2',
             'AUTH_USER_BOB2'   => 'AUTH_HASH_BOB2',
-        ]);
+        ], authLogMock());
 
         expect($auth->authenticate('alice2', 'pw-a'))->toBe(['id' => 'alice2']);
         expect($auth->authenticate('bob2', 'pw-b'))->toBeNull();
@@ -183,13 +191,13 @@ describe('environment variable resolution', function () {
     it('creates an authenticator with no users when all env vars are missing', function () {
         $auth = new EnvironmentAuthenticator([
             'NONEXISTENT_USER_VAR' => 'NONEXISTENT_HASH_VAR',
-        ]);
+        ], authLogMock());
 
         expect($auth->authenticate('anyone', 'anything'))->toBeNull();
     });
 
     it('creates an authenticator with no users from an empty config', function () {
-        $auth = new EnvironmentAuthenticator([]);
+        $auth = new EnvironmentAuthenticator([], authLogMock());
 
         expect($auth->authenticate('anyone', 'anything'))->toBeNull();
     });
@@ -206,7 +214,7 @@ describe('hash format detection', function () {
         $_ENV['AUTH_USER_SHA'] = 'sha-user';
         $_ENV['AUTH_HASH_SHA'] = hash('sha256', 'my-password');
 
-        $auth = new EnvironmentAuthenticator(['AUTH_USER_SHA' => 'AUTH_HASH_SHA']);
+        $auth = new EnvironmentAuthenticator(['AUTH_USER_SHA' => 'AUTH_HASH_SHA'], authLogMock());
 
         expect($auth->authenticate('sha-user', 'my-password'))->toBe(['id' => 'sha-user']);
         expect($auth->authenticate('sha-user', 'wrong'))->toBeNull();
@@ -216,7 +224,7 @@ describe('hash format detection', function () {
         $_ENV['AUTH_USER_BC'] = 'bc-user';
         $_ENV['AUTH_HASH_BC'] = password_hash('bcrypt-pass', PASSWORD_BCRYPT);
 
-        $auth = new EnvironmentAuthenticator(['AUTH_USER_BC' => 'AUTH_HASH_BC']);
+        $auth = new EnvironmentAuthenticator(['AUTH_USER_BC' => 'AUTH_HASH_BC'], authLogMock());
 
         expect($auth->authenticate('bc-user', 'bcrypt-pass'))->toBe(['id' => 'bc-user']);
         expect($auth->authenticate('bc-user', 'wrong'))->toBeNull();
