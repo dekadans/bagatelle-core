@@ -63,7 +63,14 @@ class Application
             exit();
         }
 
-        $this->container = require $this->appRoot . '/config/container.php';
+        foreach (['PATH_CONTAINER', 'PATH_CONTROLLERS', 'PATH_TEMPLATES'] as $var) {
+            if (empty($_ENV[$var])) {
+                echo "Environment variable '$var' must be set.";
+                exit();
+            }
+        }
+
+        $this->container = require $this->appRoot . '/' . $_ENV['PATH_CONTAINER'];
         $this->dispatcher = $this->service(EventDispatcherInterface::class);
         $this->logger = $this->service(LoggerInterface::class);
 

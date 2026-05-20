@@ -171,7 +171,7 @@ class DefaultConfiguration
                 if (!empty($_ENV['TWIG_CACHE_DIR'])) {
                     $cacheDir = $c->get('app.root') . '/' . $_ENV['TWIG_CACHE_DIR'];
                 }
-                $templateDir = $c->get('app.root') . '/src/Templates';
+                $templateDir = $c->get('app.root') . '/' . $_ENV['PATH_TEMPLATES'];
                 $options = ['cache' => $cacheDir ?? false];
                 return new Twig(new TwigFilesystemLoader($templateDir), $options);
             },
@@ -191,7 +191,7 @@ class DefaultConfiguration
                     $cacheDirectory = $c->get('app.root') . '/' . $_ENV['ROUTING_CACHE_DIR'];
                 }
                 $options = ['cache_dir' => $cacheDirectory ?? null];
-                return new Router($loader, 'src/Controllers', $options);
+                return new Router($loader, $_ENV['PATH_CONTROLLERS'], $options);
             },
             UrlGeneratorInterface::class => get(RouterInterface::class),
         ];
