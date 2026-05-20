@@ -3,7 +3,7 @@
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
 use tthe\Bagatelle\Auth\AuthenticatorInterface;
-use tthe\Bagatelle\Http\BasicAuthHandler;
+use tthe\Bagatelle\Http\BasicAuth;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -34,20 +34,20 @@ function mockAuthenticator(?array $returnValue): AuthenticatorInterface
 
 describe('missing credentials', function () {
     it('throws UnauthorizedHttpException when no credentials are provided', function () {
-        $handler = new BasicAuthHandler('Test Realm', mockAuthenticator(['id' => 1]));
+        $handler = new BasicAuth(mockAuthenticator(['id' => 1]));
         $request = makeAuthRequest(); // no PHP_AUTH_USER header
 
-        expect(fn() => $handler->inbound($request))
+        expect(fn() => $handler->inbound($request, []))
             ->toThrow(UnauthorizedHttpException::class);
     });
 
     it('includes WWW-Authenticate header when credentials are absent', function () {
-        $handler = new BasicAuthHandler('Secured Content', mockAuthenticator(null));
+        $handler = new BasicAuth(mockAuthenticator(null));
 
         try {
-            $handler->inbound(makeAuthRequest());
+            $handler->inbound(makeAuthRequest(), []);
         } catch (UnauthorizedHttpException $e) {
-            expect($e->getHeaders()['WWW-Authenticate'])->toBe('Basic realm="Secured Content"');
+            expect($e->getHeaders()['WWW-Authenticate'])->toBe('Basic realm="Protected content"');
         }
     });
 });
@@ -58,10 +58,10 @@ describe('missing credentials', function () {
 
 describe('invalid credentials', function () {
     it('throws UnauthorizedHttpException when authenticator returns null', function () {
-        $handler = new BasicAuthHandler('Test Realm', mockAuthenticator(null));
+        $handler = new BasicAuth(mockAuthenticator(null));
         $request = makeAuthRequest('alice', 'wrong-password');
 
-        expect(fn() => $handler->inbound($request))
+        expect(fn() => $handler->inbound($request, []))
             ->toThrow(UnauthorizedHttpException::class);
     });
 
@@ -72,9 +72,9 @@ describe('invalid credentials', function () {
             ->once()
             ->andReturn(null);
 
-        $handler = new BasicAuthHandler('Test Realm', $mock);
+        $handler = new BasicAuth($mock);
 
-        expect(fn() => $handler->inbound(makeAuthRequest('alice', 'secret')))
+        expect(fn() => $handler->inbound(makeAuthRequest('alice', 'secret'), []))
             ->toThrow(UnauthorizedHttpException::class);
     });
 });
@@ -86,27 +86,27 @@ describe('invalid credentials', function () {
 describe('successful authentication', function () {
     it('returns null (passes to next middleware) on success', function () {
         $attributes = ['id' => 42, 'name' => 'Alice'];
-        $handler    = new BasicAuthHandler('Test Realm', mockAuthenticator($attributes));
+        $handler    = new BasicAuth(mockAuthenticator($attributes));
         $request    = makeAuthRequest('alice', 'correct-password');
 
-        expect($handler->inbound($request))->toBeNull();
+        expect($handler->inbound($request, []))->toBeNull();
     });
 
     it('stores user attributes on the request under auth.user', function () {
         $attributes = ['id' => 42, 'name' => 'Alice'];
-        $handler    = new BasicAuthHandler('Test Realm', mockAuthenticator($attributes));
+        $handler    = new BasicAuth(mockAuthenticator($attributes));
         $request    = makeAuthRequest('alice', 'correct-password');
 
-        $handler->inbound($request);
+        $handler->inbound($request, []);
 
         expect($request->attributes->get('auth.user'))->toBe($attributes);
     });
 
     it('stores authentication scheme on the request under auth.scheme', function () {
-        $handler    = new BasicAuthHandler('Test Realm', mockAuthenticator([]));
+        $handler    = new BasicAuth(mockAuthenticator([]));
         $request    = makeAuthRequest('alice', 'correct-password');
 
-        $handler->inbound($request);
+        $handler->inbound($request, []);
 
         expect($request->attributes->get('auth.scheme'))->toBe('Basic');
     });

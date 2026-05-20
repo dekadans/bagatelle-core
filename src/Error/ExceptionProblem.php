@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tthe\Bagatelle\Error;
 
 use Symfony\Component\ErrorHandler\Exception\FlattenException;

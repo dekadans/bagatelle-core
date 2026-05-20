@@ -4,11 +4,6 @@ declare(strict_types=1);
 
 namespace tthe\Bagatelle\Config;
 
-use tthe\Bagatelle\Auth\AuthenticatorInterface;
-use tthe\Bagatelle\Http\BasicAuthHandler;
-use tthe\Bagatelle\Http\CorsHandler;
-use tthe\Bagatelle\Routing\DecoratedControllerLoader;
-use tthe\Bagatelle\Routing\MiddlewareHandler;
 use Monolog\Handler\StreamHandler;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Container\ContainerInterface;
@@ -49,9 +44,13 @@ use Symfony\Component\Routing\Loader\AttributeDirectoryLoader;
 use Symfony\Component\Routing\Router;
 use Symfony\Component\Routing\RouterInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface as ContractsEventDispatcherInterface;
+use tthe\Bagatelle\Auth\AuthenticatorInterface;
+use tthe\Bagatelle\Http\BasicAuth;
+use tthe\Bagatelle\Http\CORS;
+use tthe\Bagatelle\Middleware\MiddlewareHandler;
+use tthe\Bagatelle\Routing\DecoratedControllerLoader;
 use Twig\Environment as Twig;
 use Twig\Loader\FilesystemLoader as TwigFilesystemLoader;
-
 use function DI\create;
 use function DI\get;
 
@@ -186,7 +185,8 @@ class DefaultConfiguration
                 return new FileLocator($c->get('app.root'));
             },
             RouterInterface::class => function (FileLocatorInterface $fileLocator, ContainerInterface $c) {
-                $loader = new AttributeDirectoryLoader($fileLocator, new DecoratedControllerLoader());
+                $env = $_ENV['ROUTING_ENV'] ?? 'prod';
+                $loader = new AttributeDirectoryLoader($fileLocator, new DecoratedControllerLoader($env));
                 if (!empty($_ENV['ROUTING_CACHE_DIR'])) {
                     $cacheDirectory = $c->get('app.root') . '/' . $_ENV['ROUTING_CACHE_DIR'];
                 }
@@ -262,12 +262,10 @@ class DefaultConfiguration
         return [
             // CORS middleware
             'bagatelle.http.middleware.cors' => [],
-            CorsHandler::class => create()->constructor(get('bagatelle.http.middleware.cors')),
+            CORS::class => create()->constructor(get('bagatelle.http.middleware.cors')),
 
             // Basic Auth middleware
-            'bagatelle.http.middleware.basic-auth.realm' => 'Protected content',
-            BasicAuthHandler::class => create()->constructor(
-                get('bagatelle.http.middleware.basic-auth.realm'),
+            BasicAuth::class => create()->constructor(
                 get(AuthenticatorInterface::class)
             ),
         ];
