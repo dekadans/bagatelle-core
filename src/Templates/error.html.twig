@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- "prohibited" from twemoji -->
+    <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzNiAzNiI+PHBhdGggZmlsbD0iI0REMkU0NCIgZD0iTTE4IDBDOC4wNTkgMCAwIDguMDU5IDAgMThzOC4wNTkgMTggMTggMTggMTgtOC4wNTkgMTgtMThTMjcuOTQxIDAgMTggMHptMTMgMThjMCAyLjU2NS0uNzUzIDQuOTUtMi4wMzUgNi45NjVMMTEuMDM2IDcuMDM2QzEzLjA1IDUuNzUzIDE1LjQzNSA1IDE4IDVjNy4xOCAwIDEzIDUuODIxIDEzIDEzek01IDE4YzAtMi41NjUuNzUzLTQuOTUgMi4wMzYtNi45NjRsMTcuOTI5IDE3LjkyOUMyMi45NSAzMC4yNDcgMjAuNTY1IDMxIDE4IDMxYy03LjE3OSAwLTEzLTUuODItMTMtMTN6Ii8+PC9zdmc+" />
+    <title>{{ page_title ?? 'Error!' }}</title>
+    {{ include('@bagatelle/style.html.twig') }}
+</head>
+<body>
+<main>
+    <section>
+        <h1>{{ title }}</h1>
+        <p>{{ message }}</p>
+    </section>
+
+    {% if exception %}
+        <section>
+            <h2>Exception Details</h2>
+            <pre><code>
+{%- for ex in exception %}
+<span class="error-type">{{ ex.class }}</span>
+{% if ex.message -%} {{ ex.message }} {%- endif %}
+
+
+<span class="error-type">Stack trace:</span>
+{% for trace in ex.trace %}
+at <span class="file-path">{{ trace.file }}</span>:<span class="line-number">{{ trace.line }}</span>
+    {{ trace.function }}
+{% endfor %}
+
+<hr>
+{% endfor %}
+            </code></pre>
+        </section>
+    {% endif %}
+</main>
+</body>
+</html>

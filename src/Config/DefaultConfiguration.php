@@ -49,8 +49,8 @@ use tthe\Bagatelle\Http\BasicAuth;
 use tthe\Bagatelle\Http\CORS;
 use tthe\Bagatelle\Middleware\MiddlewareHandler;
 use tthe\Bagatelle\Routing\DecoratedControllerLoader;
-use Twig\Environment as Twig;
 use Twig\Loader\FilesystemLoader as TwigFilesystemLoader;
+use Twig\Loader\LoaderInterface;
 use function DI\create;
 use function DI\get;
 
@@ -167,13 +167,19 @@ class DefaultConfiguration
     public static function templating(): array
     {
         return [
-            Twig::class => function (ContainerInterface $c) {
+            LoaderInterface::class => function (ContainerInterface $c) {
+                $templateDir = $c->get('app.root') . '/' . $_ENV['PATH_TEMPLATES'];
+                $loader = new TwigFilesystemLoader($templateDir);
+                $loader->addPath(dirname(__DIR__) . '/Templates', 'bagatelle');
+                return $loader;
+            },
+            \Twig\Environment::class => function (ContainerInterface $c) {
+                $loader = $c->get(LoaderInterface::class);
                 if (!empty($_ENV['TWIG_CACHE_DIR'])) {
                     $cacheDir = $c->get('app.root') . '/' . $_ENV['TWIG_CACHE_DIR'];
                 }
-                $templateDir = $c->get('app.root') . '/' . $_ENV['PATH_TEMPLATES'];
                 $options = ['cache' => $cacheDir ?? false];
-                return new Twig(new TwigFilesystemLoader($templateDir), $options);
+                return new \Twig\Environment($loader, $options);
             },
         ];
     }
