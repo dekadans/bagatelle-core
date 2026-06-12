@@ -11,11 +11,12 @@ use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Application as ConsoleApplication;
+use Symfony\Component\Console\ArgumentResolver\ArgumentResolverInterface as ConsoleArgumentResolverInterface;
 use Symfony\Component\Console\CommandLoader\CommandLoaderInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Component\HttpKernel\Controller\ArgumentResolverInterface;
+use Symfony\Component\HttpKernel\Controller\ArgumentResolverInterface as HttpArgumentResolverInterface;
 use Symfony\Component\HttpKernel\Controller\ContainerControllerResolver;
 use Symfony\Component\HttpKernel\HttpKernel;
 
@@ -109,7 +110,7 @@ class Application
         $this->subscribe('bagatelle.http.subscribers', 'app.http.subscribers');
 
         $controllerResolver = new ContainerControllerResolver($this->container);
-        $argumentResolver = $this->service(ArgumentResolverInterface::class);
+        $argumentResolver = $this->service(HttpArgumentResolverInterface::class);
 
         $kernel = new HttpKernel(
             $this->dispatcher,
@@ -138,10 +139,12 @@ class Application
 
         $name = $this->config('app.console.name');
         $loader = $this->service(CommandLoaderInterface::class);
+        $argumentResolver = $this->service(ConsoleArgumentResolverInterface::class);
 
         $app = new ConsoleApplication($name);
         $app->setCommandLoader($loader);
         $app->setDispatcher($this->dispatcher);
+        $app->setArgumentResolver($argumentResolver);
 
         return function () use ($app) {
             $app->run();

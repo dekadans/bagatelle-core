@@ -8,7 +8,7 @@ use Symfony\Component\Routing\Attribute\Route as RouteAttribute;
 use Symfony\Component\Routing\Route;
 use tthe\Bagatelle\Routing\RouteDecoratorInterface;
 
-#[\Attribute(\Attribute::TARGET_CLASS | \Attribute::TARGET_METHOD)]
+#[\Attribute(\Attribute::TARGET_METHOD)]
 class Get extends RouteAttribute implements RouteDecoratorInterface
 {
     public function decorate(Route $route): void

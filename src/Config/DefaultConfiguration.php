@@ -24,6 +24,9 @@ use Symfony\Bridge\PsrHttpMessage\HttpFoundationFactoryInterface;
 use Symfony\Bridge\PsrHttpMessage\HttpMessageFactoryInterface;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\Config\FileLocatorInterface;
+use Symfony\Component\Console\ArgumentResolver\ArgumentResolver as ConsoleArgumentResolver;
+use Symfony\Component\Console\ArgumentResolver\ArgumentResolverInterface as ConsoleArgumentResolverInterface;
+use Symfony\Component\Console\ArgumentResolver\ValueResolver\ServiceValueResolver;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\CommandLoader\CommandLoaderInterface;
 use Symfony\Component\Console\CommandLoader\ContainerCommandLoader;
@@ -244,6 +247,14 @@ class DefaultConfiguration
     public static function console(): array
     {
         return [
+            ConsoleArgumentResolverInterface::class => function (ContainerInterface $c) {
+                $serviceValueResolver = new ServiceValueResolver($c);
+                $valueResolvers = array_merge(
+                    [$serviceValueResolver],
+                    ConsoleArgumentResolver::getDefaultArgumentValueResolvers()
+                );
+                return new ConsoleArgumentResolver($valueResolvers, $c);
+            },
             CommandLoaderInterface::class => function (ContainerInterface $c) {
                 $commandMap = [];
                 foreach ($c->get('app.console.commands') as $commandClass) {
