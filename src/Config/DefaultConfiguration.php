@@ -27,7 +27,6 @@ use Symfony\Component\Config\FileLocatorInterface;
 use Symfony\Component\Console\ArgumentResolver\ArgumentResolver as ConsoleArgumentResolver;
 use Symfony\Component\Console\ArgumentResolver\ArgumentResolverInterface as ConsoleArgumentResolverInterface;
 use Symfony\Component\Console\ArgumentResolver\ValueResolver\ServiceValueResolver;
-use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\CommandLoader\CommandLoaderInterface;
 use Symfony\Component\Console\CommandLoader\ContainerCommandLoader;
 use Symfony\Component\Console\EventListener\ErrorListener as ConsoleErrorListener;
@@ -48,10 +47,13 @@ use Symfony\Component\Routing\Router;
 use Symfony\Component\Routing\RouterInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface as ContractsEventDispatcherInterface;
 use tthe\Bagatelle\Auth\AuthenticatorInterface;
+use tthe\Bagatelle\Console\ContainerCommandDefinitionLoader;
+use tthe\Bagatelle\Console\CommandDefinitionLoaderInterface;
 use tthe\Bagatelle\Http\BasicAuth;
 use tthe\Bagatelle\Http\CORS;
 use tthe\Bagatelle\Middleware\MiddlewareHandler;
 use tthe\Bagatelle\Routing\DecoratedControllerLoader;
+use tthe\Bagatelle\Routing\RoutesCommand;
 use Twig\Loader\FilesystemLoader as TwigFilesystemLoader;
 use Twig\Loader\LoaderInterface;
 use function DI\create;
@@ -178,8 +180,8 @@ class DefaultConfiguration
             },
             \Twig\Environment::class => function (ContainerInterface $c) {
                 $loader = $c->get(LoaderInterface::class);
-                if (!empty($_ENV['TWIG_CACHE_DIR'])) {
-                    $cacheDir = $c->get('app.root') . '/' . $_ENV['TWIG_CACHE_DIR'];
+                if (!empty($_ENV['CACHE_TEMPLATES'])) {
+                    $cacheDir = $c->get('app.root') . '/' . $_ENV['CACHE_TEMPLATES'];
                 }
                 $options = ['cache' => $cacheDir ?? false];
                 return new \Twig\Environment($loader, $options);
@@ -196,8 +198,8 @@ class DefaultConfiguration
             RouterInterface::class => function (FileLocatorInterface $fileLocator, ContainerInterface $c) {
                 $env = $_ENV['ROUTING_ENV'] ?? 'prod';
                 $loader = new AttributeDirectoryLoader($fileLocator, new DecoratedControllerLoader($env));
-                if (!empty($_ENV['ROUTING_CACHE_DIR'])) {
-                    $cacheDirectory = $c->get('app.root') . '/' . $_ENV['ROUTING_CACHE_DIR'];
+                if (!empty($_ENV['CACHE_CONTROLLERS'])) {
+                    $cacheDirectory = $c->get('app.root') . '/' . $_ENV['CACHE_CONTROLLERS'];
                 }
                 $options = ['cache_dir' => $cacheDirectory ?? null];
                 return new Router($loader, $_ENV['PATH_CONTROLLERS'], $options);
@@ -255,16 +257,20 @@ class DefaultConfiguration
                 );
                 return new ConsoleArgumentResolver($valueResolvers, $c);
             },
-            CommandLoaderInterface::class => function (ContainerInterface $c) {
-                $commandMap = [];
-                foreach ($c->get('app.console.commands') as $commandClass) {
-                    $commandAttribute = new \ReflectionClass($commandClass)->getAttributes(AsCommand::class);
-                    if ($commandAttribute) {
-                        $name = $commandAttribute[0]->newInstance()->name;
-                        $commandMap[$name] = $commandClass;
-                    }
+            CommandDefinitionLoaderInterface::class => function (FileLocatorInterface $locator, ContainerInterface $c) {
+                if (!empty($_ENV['CACHE_COMMANDS'])) {
+                    $cachePath = $c->get('app.root') . '/' . $_ENV['CACHE_COMMANDS'];
                 }
-                return new ContainerCommandLoader($c, $commandMap);
+                return new ContainerCommandDefinitionLoader($locator, $_ENV['PATH_COMMANDS'], [
+                    'extra' => [RoutesCommand::class],
+                    'cache' => $cachePath ?? null,
+                ]);
+            },
+            CommandLoaderInterface::class => function (ContainerInterface $c) {
+                /** @var CommandDefinitionLoaderInterface $definitionLoader */
+                $definitionLoader = $c->get(CommandDefinitionLoaderInterface::class);
+                $definitions = $definitionLoader->load();
+                return new ContainerCommandLoader($c, $definitions);
             },
             'bagatelle.console.subscribers' => [
                 create(ConsoleErrorListener::class)

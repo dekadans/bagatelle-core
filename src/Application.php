@@ -64,7 +64,7 @@ class Application
             exit();
         }
 
-        foreach (['PATH_CONTAINER', 'PATH_CONTROLLERS', 'PATH_TEMPLATES'] as $var) {
+        foreach (['PATH_CONTAINER', 'PATH_CONTROLLERS', 'PATH_COMMANDS', 'PATH_TEMPLATES'] as $var) {
             if (empty($_ENV[$var])) {
                 echo "Environment variable '$var' must be set.";
                 exit();

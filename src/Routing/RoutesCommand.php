@@ -11,7 +11,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Routing\RouterInterface;
 use tthe\Bagatelle\Http\Method;
 
-#[AsCommand('routes', 'Prints all registered routes.')]
+#[AsCommand('bagatelle:routes', 'Prints all registered routes.')]
 class RoutesCommand extends Command
 {
     public function __construct(private readonly RouterInterface $router)
