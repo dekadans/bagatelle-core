@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace tthe\Bagatelle\Routing;
+namespace tthe\Bagatelle\Console;
 
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Attribute\Option;

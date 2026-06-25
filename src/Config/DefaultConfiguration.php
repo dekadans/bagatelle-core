@@ -47,13 +47,14 @@ use Symfony\Component\Routing\Router;
 use Symfony\Component\Routing\RouterInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface as ContractsEventDispatcherInterface;
 use tthe\Bagatelle\Auth\AuthenticatorInterface;
-use tthe\Bagatelle\Console\ContainerCommandDefinitionLoader;
+use tthe\Bagatelle\Console\ClearCacheCommand;
 use tthe\Bagatelle\Console\CommandDefinitionLoaderInterface;
+use tthe\Bagatelle\Console\ContainerCommandDefinitionLoader;
+use tthe\Bagatelle\Console\RoutesCommand;
 use tthe\Bagatelle\Http\BasicAuth;
 use tthe\Bagatelle\Http\CORS;
 use tthe\Bagatelle\Middleware\MiddlewareHandler;
 use tthe\Bagatelle\Routing\DecoratedControllerLoader;
-use tthe\Bagatelle\Routing\RoutesCommand;
 use Twig\Loader\FilesystemLoader as TwigFilesystemLoader;
 use Twig\Loader\LoaderInterface;
 use function DI\create;
@@ -196,7 +197,7 @@ class DefaultConfiguration
                 return new FileLocator($c->get('app.root'));
             },
             RouterInterface::class => function (FileLocatorInterface $fileLocator, ContainerInterface $c) {
-                $env = $_ENV['ROUTING_ENV'] ?? 'prod';
+                $env = $_ENV['APP_ENV'] ?? 'prod';
                 $loader = new AttributeDirectoryLoader($fileLocator, new DecoratedControllerLoader($env));
                 if (!empty($_ENV['CACHE_CONTROLLERS'])) {
                     $cacheDirectory = $c->get('app.root') . '/' . $_ENV['CACHE_CONTROLLERS'];
@@ -262,7 +263,7 @@ class DefaultConfiguration
                     $cachePath = $c->get('app.root') . '/' . $_ENV['CACHE_COMMANDS'];
                 }
                 return new ContainerCommandDefinitionLoader($locator, $_ENV['PATH_COMMANDS'], [
-                    'extra' => [RoutesCommand::class],
+                    'extra' => [RoutesCommand::class, ClearCacheCommand::class],
                     'cache' => $cachePath ?? null,
                 ]);
             },
