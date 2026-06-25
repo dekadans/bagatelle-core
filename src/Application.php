@@ -93,7 +93,9 @@ class Application
                 "Unhandled exception: {$ex->getMessage()}",
                 ['exception' => $ex]
             );
-            if (PHP_SAPI !== 'cli') {
+            if (PHP_SAPI == 'cli') {
+                echo "FATAL ERROR: {$ex->getMessage()}\n";
+            } else {
                 http_response_code(500);
                 echo 'Internal Server Error';
             }
