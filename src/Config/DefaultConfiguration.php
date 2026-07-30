@@ -8,6 +8,7 @@ use Monolog\Handler\StreamHandler;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface as PsrEventDispatcherInterface;
+use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestFactoryInterface;
@@ -132,6 +133,7 @@ class DefaultConfiguration
     public static function psr7Support(): array
     {
         return [
+            RequestFactoryInterface::class => create(Psr17Factory::class),
             ServerRequestFactoryInterface::class => create(Psr17Factory::class),
             StreamFactoryInterface::class => create(Psr17Factory::class),
             UploadedFileFactoryInterface::class => create(Psr17Factory::class),
